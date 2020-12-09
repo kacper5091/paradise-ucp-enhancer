@@ -1,8 +1,12 @@
 // ==UserScript==
 // @name         Eitho's Paradise UCP enhancer
-// @version      1.29
+// @version      1.30
 // @description  Fixes and new functions for https://ucp.paradise-rpg.pl/
-// @updateURL    Xhttps://eitho.ct8.pl/tampermonkey_scripts/paradiseUCPenhancer1.0.user.js
+// @homepageURL  https://github.com/Eithoo/paradise-ucp-enhancer
+// @updateURL    https://github.com/Eithoo/paradise-ucp-enhancer/raw/main/paradise_ucp_enhancer.user.js
+// @downloadURL  https://github.com/Eithoo/paradise-ucp-enhancer/raw/main/paradise_ucp_enhancer.user.js
+// @supportURL   https://github.com/Eithoo/paradise-ucp-enhancer/issues
+// @connect      *
 // @icon         https://i.imgur.com/gJ9fUg0.png
 // @author       Eitho
 // @match        https://ucp.paradise-rpg.pl
@@ -47,6 +51,7 @@
 		api: {
 			blips: 'https://ucp.paradise-rpg.pl/houses/blips',
 			houses: 'https://ucp.paradise-rpg.pl/houses/houses',
+			tenants: 'https://ucp.paradise-rpg.pl/houses/tenants',
 			zones: 'https://ucp.paradise-rpg.pl/houses/zones',
 			top: {
 				lvl: 'https://ucp.paradise-rpg.pl/api/lvlTop',
@@ -483,10 +488,11 @@
 		return separator;
 	}
 
-	function add_tooltip(element, textInTooltip, withHTML, position) {
+	function add_tooltip(element, textInTooltip, withHTML, position, withoutTitle) {
 		// <b data-toggle="tooltip" data-placement="top" title="" data-original-title="26-11-2020 12:11:00">1 godzine temu</b>
 		element.setAttribute('data-toggle', 'tooltip');
-		element.setAttribute('title', textInTooltip);
+		if (!withoutTitle) element.setAttribute('title', textInTooltip);
+		element.setAttribute('data-original-title', textInTooltip);
 		if (withHTML) element.setAttribute('data-html', 'true');
 		if (position) element.setAttribute('data-placement', position);
 	}
@@ -895,19 +901,83 @@
 	async function searchForPlayerHouse(playerID) {
 		if (!playerID) return;
 		const houses = await getHouses(playerID);
-		if (!houses) return;
-		for (const house of houses) {
+		const allTenants = await getTenants();
+		if (houses) { // jesli ma swoj dom
+			for (const house of houses) {
+				console.log(house);
+				const position = JSON.parse(house.position)[0].map(pos => pos.toFixed(2)).join(', ');
+				const infobox = add_infoBox('fas fa-house-user', 'mieszkanie', `kończy się ${timeFromNow(+house.expires * 1000, true)}`);
+				let tooltip_text = `	
+					<b>ID:</b> ${house.id}<br>
+					<b>Cena za dobę:</b> $${house.price}<br>
+					<b>Opłacone do:</b> ${new Date(house.expires*1000).toLocaleString()}<br>
+					<b>Wielkość:</b> ${house.size}m<sup>2</sup><br>
+					<b>Lokalizacja:</b> ${house.location}<br>
+					<b>Dokładna pozycja:</b> ${position}
+				`;
+				add_tooltip(infobox, tooltip_text, true, false, true);
+				if (allTenants) {
+					const houseTenants = allTenants.filter(tenant => tenant.houseID == house.id);
+					if (houseTenants.length > 0) {
+						let a = [];
+						let b = [];
+						let tenantsInfobox;
+						houseTenants.map(async tenant => {
+							const player = await getPage(urls.profile + tenant.cid); // moze kiedys zrobic do tego osobna funkcje z zapisywaniem do pamieci, np getPlayerData()
+							const nick = player.querySelector('div.group_name').innerText.trim();
+							const rank = player.querySelectorAll('div.group_fullname')[1].innerText.trim();
+							const level = player.querySelectorAll('div.group_infobox')[2].querySelector('b').innerText.trim();
+							const color = colors[rank] || '#ffffff';
+							a.push(`<b>[${tenant.cid}]</b> <span style='color: ${color}'>${nick}</span><small>, ${level} lvl</small>`);
+							b.push(`<a href='${urls.profile + tenant.cid}' style='color: ${color}'>${nick}</a>`);
+							console.log(nick, rank, level+' lvl');
+							add_tooltip(infobox, tooltip_text + '<br><b>Lokatorzy: </b>'+a.join('<br>'), true, false, true);
+							if (!tenantsInfobox) tenantsInfobox = add_infoBox('fas fa-couch', 'mieszkanie - lokatorzy', b.join(', '));
+							else update_infoBox(tenantsInfobox, b.join(', '));
+						});
+					}
+				}
+			}
+			return;
+		} 
+		if (!allTenants) return;
+		let tenantPlayer = allTenants.filter(tenant => tenant.cid == +playerID);
+		if (tenantPlayer.length > 0) { // jesli nie ma wlasnego domu ale mieszka u kogos
+			tenantPlayer = tenantPlayer[0];
+			const houseID = tenantPlayer.houseID;
+			const houseTenants = allTenants.filter(tenant => tenant.houseID == houseID);
+			const allHouses = await getHouses();
+			const house = allHouses.filter(h => h.id == houseID)[0];
 			console.log(house);
-			const position = JSON.parse(house.position)[0].map(pos => pos.toFixed(2)).join(', ');
-			const infobox = add_infoBox('fas fa-house-user', 'mieszkanie', `kończy się ${timeFromNow(+house.expires * 1000, true)}`);
-			add_tooltip(infobox, `	
-			<b>ID:</b> ${house.id}<br>
-			<b>Cena za dobę:</b> $${house.price}<br>
-			<b>Opłacone do:</b> ${new Date(house.expires*1000).toLocaleString()}<br>
-			<b>Wielkość:</b> ${house.size}m<sup>2</sup><br>
-			<b>Lokalizacja:</b> ${house.location}<br>
-			<b>Dokładna pozycja</b> ${position}
-			`, true);
+			getPage(urls.profile + house.owner).then(owner => {
+				const nick = owner.querySelector('div.group_name').innerText.trim();
+				const rank = owner.querySelectorAll('div.group_fullname')[1].innerText.trim();
+				const ownerColor = colors[rank] || '#ffffff';
+				const infobox = add_infoBox('fas fa-house-user', 'mieszkanie - właściciel', `<a href='${urls.profile + house.owner}' style='color: ${ownerColor}'>${nick}</a>`);
+				const position = JSON.parse(house.position)[0].map(pos => pos.toFixed(2)).join(', ');
+				add_tooltip(infobox, `	
+					<b>ID:</b> ${house.id}<br>
+					<b>Cena za dobę:</b> $${house.price}<br>
+					<b>Kończy się:</b> ${timeFromNow(+house.expires * 1000, true)}<br>
+					<b>Opłacone do:</b> ${new Date(house.expires*1000).toLocaleString()}<br>
+					<b>Wielkość:</b> ${house.size}m<sup>2</sup><br>
+					<b>Lokalizacja:</b> ${house.location}<br>
+					<b>Dokładna pozycja:</b> ${position}
+				`, true, false, true);
+			});
+			let tenants = [];
+			let tenantsInfobox;
+			houseTenants.map(async tenant => {
+				console.log(tenant);
+				if (tenant.cid == playerID) return;
+				const player = await getPage(urls.profile + tenant.cid); // moze kiedys zrobic do tego osobna funkcje z zapisywaniem do pamieci, np getPlayerData()
+				const nick = player.querySelector('div.group_name').innerText.trim();
+				const rank = player.querySelectorAll('div.group_fullname')[1].innerText.trim();
+				const color = colors[rank] || '#ffffff';
+				tenants.push(`<a href='${urls.profile + tenant.cid}' style='color: ${color}'>${nick}</a>`);
+				if (!tenantsInfobox) tenantsInfobox = add_infoBox('fas fa-couch', 'mieszkanie - współlokatorzy', tenants.join(', '));
+				else update_infoBox(tenantsInfobox, tenants.join(', '));
+			});
 		}
 	}
 
@@ -937,15 +1007,16 @@
 		}
 	}
 
+	const colors = {
+		['Global Moderator']: '#f39c12',
+		Administrator: '#e05252',
+		Zarząd: '#b54343',
+		Moderator: '#57cca2',
+		Support: '#57afcc',
+		Eitho: '#ffbb48' // to tez potem mozna zmienic - jesli ktos bedzie edytowal ten skrypt, to niech sie dopisze jako nowy klucz, lub przerobi troche ten kod zeby dzialal na wiecej osob
+	};
+
 	function shadowOnAdm() {
-		const colors = {
-			['Global Moderator']: '#f39c12',
-			Administrator: '#e05252',
-			Zarząd: '#b54343',
-			Moderator: '#57cca2',
-			Support: '#57afcc',
-			Eitho: '#ffbb48' // to tez potem mozna zmienic - jesli ktos bedzie edytowal ten skrypt, to niech sie dopisze jako nowy klucz, lub przerobi troche ten kod zeby dzialal na wiecej osob
-		};
 		var place = document.querySelector('.group_info');
 		var rankPlace = place.querySelectorAll('div.group_fullname')[1];
 		var rank = rankPlace.innerText.trim();
@@ -1046,7 +1117,9 @@
 
 	async function addZonesToMainPage() {
 		const groups = document.querySelectorAll('.row')[1].querySelectorAll('.group_info');
-		const zones = await getZones();
+		const zones = await getZones()
+		.catch(error => false);
+		if (!zones) return;
 	//	let zonesButOnlyGang = [];
 		for (const group of groups) {
 			const groupID = group.querySelector('a.avatar').href.split('/').slice(-1)[0];
@@ -1073,6 +1146,32 @@
 			console.log(top);
 		}*/
 		// jesli bym wrocil kiedys do pomyslu dawania kolorow tylko dla top 3 terenow to odkodowac
+	}
+
+	async function getTenants(playerID) {
+		if (localStorage.tenants) {
+			const now = new Date().getTime();
+			let fromCache = JSON.parse(localStorage.tenants);
+			if (((now - fromCache.createTime) / 60000) > 15) {
+				const page = await getPage(urls.api.tenants, true);
+				let tenants = JSON.parse(page);
+				localStorage.removeItem('tenants');
+				localStorage.tenants = JSON.stringify({
+					createTime: new Date().getTime(),
+					data: tenants
+				});
+				return tenants;
+			}
+			let tenants = JSON.parse(localStorage.tenants).data;
+			return tenants;
+		}
+		const page = await getPage(urls.api.tenants, true);
+		let tenants = JSON.parse(page);
+		localStorage.tenants = JSON.stringify({
+			createTime: new Date().getTime(),
+			data: tenants
+		});
+		return tenants;
 	}
 
 
@@ -1252,6 +1351,7 @@
 		GM_addStyle(font);
 	}
 	mainActivity();
+	// TODO pobawic sie @connect w tagach (Proszę zauważyć, że autorzy skryptu mogą uniknąć wyświetlania tego okna dialogowego dodając @connect tags ⬀ do ich skryptów.)
 	// TODO ogarniecie kodu z wyszukiwaniem organizacji gracza - to byla jedna z pierwszych funkcjonalnosci tutaj i nie wiedzialem jeszcze jak to dobrze pisac, no i wyszlo gowno
 	// TODO ogarnac funkcje addSomethingToNick bo to syf kila i mogila
 	// TODO ogarnac funkcje shadowOnAdm, bo nie jest przystosowana pod rozbudowe i tez troche chuj dupa i kamieni kupa
