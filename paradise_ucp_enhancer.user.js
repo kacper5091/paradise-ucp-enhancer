@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Eitho's Paradise UCP enhancer
-// @version      1.30
+// @version      1.31
 // @description  Fixes and new functions for https://ucp.paradise-rpg.pl/
 // @homepageURL  https://github.com/Eithoo/paradise-ucp-enhancer
 // @updateURL    https://github.com/Eithoo/paradise-ucp-enhancer/raw/main/paradise_ucp_enhancer.user.js
@@ -106,6 +106,15 @@
 		element.parentNode.insertBefore(this, element.nextSibling);
 	}, false;
 
+	function cfDecodeEmail(encodedString) { // Author: Ruri (https://forum.openbullet.dev/topic/29/parsing-cloudflare-protected-emails)
+		var email = "", r = parseInt(encodedString.substr(0, 2), 16), n, i;
+		for (n = 2; encodedString.length - n; n += 2){
+			i = parseInt(encodedString.substr(n, 2), 16) ^ r;
+			email += String.fromCharCode(i);
+		}
+		return email;
+	}
+
 	function getPage(url, dontparse, method) {
 		return new Promise(function (resolve, reject) {
 			GM.xmlHttpRequest({
@@ -117,6 +126,14 @@
 					else if (dontparse && dontparse != 'returnall') resolve(response.responseText);
 					else {
 						var page = new DOMParser().parseFromString(response.responseText, 'text/html');
+						const nicksWithEmails = page.querySelectorAll('.__cf_email__'); // fix for [email protected]
+						if (nicksWithEmails) {
+							for (const element of nicksWithEmails) {
+								const string = element.getAttribute('data-cfemail');
+								const nick = cfDecodeEmail(string);
+								element.innerText = nick;
+							}
+						}
 						resolve(page);
 					}
 				},
