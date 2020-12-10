@@ -23,7 +23,7 @@
 // ==/UserScript==
 
 (function() {
-	'use strict';
+	'use strict'; 
 
 	/*
 	
@@ -69,7 +69,8 @@
 		});
 	}
 
-
+	console.log('testowa tresc')
+	
 	function getHexColor(string){
 		return string.match(/#[0-9a-f]{6}|#[0-9a-f]{3}/gi) || false;
 	}
