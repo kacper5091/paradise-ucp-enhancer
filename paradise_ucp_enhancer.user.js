@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Eitho's Paradise UCP enhancer
-// @version      1.31
+// @version      1.32
 // @description  Fixes and new functions for https://ucp.paradise-rpg.pl/
 // @homepageURL  https://github.com/Eithoo/paradise-ucp-enhancer
 // @updateURL    https://github.com/Eithoo/paradise-ucp-enhancer/raw/main/paradise_ucp_enhancer.user.js
@@ -1128,7 +1128,12 @@
 		const gangZones = await getGangZones(+gangID);
 		if (!gangZones) return add_infoBox('fas fa-flag-checkered', 'strefy', '0', color, place);;
 		const allZones = await getZones();
-		add_infoBox('fas fa-flag-checkered', 'strefy', `${gangZones.length} / ${allZones.length}`, color, place, ((gangZones.length/allZones.length) * 100).toFixed(1) + '%');
+		let percentOfAll = ((gangZones.length/allZones.length) * 100);
+		percentOfAll = Number.isInteger(percentOfAll) ? percentOfAll : percentOfAll.toFixed(1);
+		let percentOfGangMax = ((gangZones.length/30) * 100);
+		percentOfGangMax = Number.isInteger(percentOfGangMax) ? percentOfGangMax : percentOfGangMax.toFixed(1);
+		const infobox = add_infoBox('fas fa-flag-checkered', 'strefy', `${gangZones.length} / 30`, color, place, percentOfGangMax + '%');
+		add_tooltip(infobox, `<b>Wszystkie tereny:</b> ${percentOfAll}%`, true);
 		console.log(gangZones);
 	}
 
@@ -1149,8 +1154,12 @@
 			const place = group.querySelectorAll('a')[1];
 			let div = document.createElement('div');
 			div.className = 'group_name_right';
-			div.innerHTML = `<i style='margin-right: .3em;' class="fas fa-flag-checkered"></i> ${gangZones.length} / ${zones.length}`;
-			add_tooltip(div, `<b>Przejęte strefy</b><br>${((gangZones.length/zones.length) * 100).toFixed(1) + '%'}`, true);
+			div.innerHTML = `<i style='margin-right: .3em;' class="fas fa-flag-checkered"></i> ${gangZones.length} / 30`;
+			let percentOfAll = ((gangZones.length/zones.length) * 100);
+			percentOfAll = Number.isInteger(percentOfAll) ? percentOfAll : percentOfAll.toFixed(1);
+			let percentOfGangMax = ((gangZones.length/30) * 100);
+			percentOfGangMax = Number.isInteger(percentOfGangMax) ? percentOfGangMax : percentOfGangMax.toFixed(1);
+			add_tooltip(div, `<b>Przejęte strefy</b><br>${percentOfGangMax}% maksymalnej ilości terenów na gang, ${percentOfAll}% wszystkich`, true);
 			div.appendAfter(place);
 		}
 	/*	console.log(zonesButOnlyGang);
@@ -1369,6 +1378,7 @@
 	}
 	mainActivity();
 	// TODO pobawic sie @connect w tagach (Proszę zauważyć, że autorzy skryptu mogą uniknąć wyświetlania tego okna dialogowego dodając @connect tags ⬀ do ich skryptów.)
+	// TODO zabrac sie za mape - dodanie pokazywania lokatorow w mieszkaniach tam, nie wiem co jeszcze zmienic
 	// TODO ogarniecie kodu z wyszukiwaniem organizacji gracza - to byla jedna z pierwszych funkcjonalnosci tutaj i nie wiedzialem jeszcze jak to dobrze pisac, no i wyszlo gowno
 	// TODO ogarnac funkcje addSomethingToNick bo to syf kila i mogila
 	// TODO ogarnac funkcje shadowOnAdm, bo nie jest przystosowana pod rozbudowe i tez troche chuj dupa i kamieni kupa
