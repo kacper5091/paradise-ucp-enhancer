@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Eitho's Paradise UCP enhancer
-// @version      1.32
+// @version      1.34
 // @description  Fixes and new functions for https://ucp.paradise-rpg.pl/
 // @homepageURL  https://github.com/Eithoo/paradise-ucp-enhancer
 // @updateURL    https://github.com/Eithoo/paradise-ucp-enhancer/raw/main/paradise_ucp_enhancer.user.js
@@ -761,14 +761,16 @@
 		function addIcon(place, where, withoutMargin, poop) {
 			if (!where) where = 'after';
 			let i = document.createElement('i');
+			let text = 'chłop jest jednym z twórców tego skryptu, co go używasz';
 			i.className = 'fas fa-code';
 			i.style.color = '#ffbb48';
 			i.style.textShadow = '0 0 3px #000';
 			if (poop) {
 				i.className = 'fas fa-poop';
 				i.style.color = '#6b4f04'
+				text = 'uważaj na nich, nie polecam  ~ Eitho';
 			}
-			place.appendChild(i);
+			add_tooltip(i, `<span style='color: ${i.style.color}'>${text}</span>`, true);
 			if (where == 'before') {
 				if (!withoutMargin) i.style.marginRight = '.5em';
 				i.appendBefore(place);
@@ -1030,7 +1032,8 @@
 		Zarząd: '#b54343',
 		Moderator: '#57cca2',
 		Support: '#57afcc',
-		Eitho: '#ffbb48' // to tez potem mozna zmienic - jesli ktos bedzie edytowal ten skrypt, to niech sie dopisze jako nowy klucz, lub przerobi troche ten kod zeby dzialal na wiecej osob
+		Eitho: '#ffbb48', // to tez potem mozna zmienic - jesli ktos bedzie edytowal ten skrypt, to niech sie dopisze jako nowy klucz, lub przerobi troche ten kod zeby dzialal na wiecej osob
+		Zasłużony: '#ffbb55'
 	};
 
 	function shadowOnAdm() {
@@ -1200,6 +1203,59 @@
 		return tenants;
 	}
 
+	function showBannedMembersInfo(uids, place, groupType) {
+		if (!uids) return;
+		if (uids.length == 0) return;
+		if (!place) place = document.querySelector('.tabcontent[style*="display: block"] div.card-body');
+		if (!groupType) groupType = 'group';
+		let box = document.createElement('div');
+		box.className = 'bannedMemberInfoBox';
+		let title = document.createElement('h1');
+		title.innerText = groupType != 'friendsList' ? (uids.length > 1 ? 'Usunięci członkowie' : 'Usunięty członek') : (uids.length > 1 ? 'Usunięci przyjaciele' : 'Usunięty przyjaciel');
+		box.appendChild(title);
+		let descText = document.createElement('span');
+		const odm = (a, b) => uids.length > 1 ? b : a;
+		if (groupType == 'friendsList')
+			descText.innerHTML = `Na liście znajomych tego gracza znajduj${odm('ę', 'ą')} się usunię${odm('ty', 'ci')} gracz${odm('', 'e')}. Jeśli nie byłeś z ${odm('nim', 'nimi')} w żadnej grupie, to nie powinno to sprawiać problemów. Jeśli jednak było inaczej, może Ci się bugować panel grupy w grze - poproś zarząd o usunięcie ${odm('tego konta', 'tych kont')} z twoich znajomych <br>i/lub wspólnych grup.`;
+		else {
+			const odm2 = {
+				group: ['tej', 'grupie', 'grupy'],
+				Cywilna: ['tej', 'organizacji'],
+				Frakcja: ['tej', 'frakcji'],
+				Gang: ['tego', 'gangu']
+			};
+			descText.innerHTML = `W ${odm2[groupType][0]} ${odm2[groupType][1]} ${odm('znajduję się zbanowana i usunięta osoba', 'znajdują się zbanowane i usunięte osoby')}. <br>Aby uniknąć bugów w panelu ${odm2[groupType][2] || odm2[groupType][1]} w grze, poproś zarząd o usunięcie ${odm('jej', 'ich')} z ${odm2[groupType][2] || odm2[groupType][1]}.`;
+		}
+		box.appendChild(descText);
+		descText.innerHTML = descText.innerHTML + '<br><br>UID: ' + uids.map(uid => '<b>' + uid + '</b>').join(', ');
+	//	place.appendChild(box);
+		place.insertAdjacentElement('afterbegin', box);
+		return box;
+	}
+
+	async function searchForBannedPlayers() {
+		const friends = document.querySelectorAll('div#tab_friends tbody th');
+		if (friends.length > 0) {
+			console.log([...friends]);
+			const bannedFriends = [...friends].map(friend => {
+				const UID = +friend.querySelector('a').href.split('/').slice(-1)[0];
+				const nick = friend.querySelector('a').innerText.trim();
+				if (!nick || nick == '') return UID;
+			}).filter(elem => elem != undefined);
+			showBannedMembersInfo(await Promise.all(bannedFriends), document.querySelector('#tab_friends div.card-body'), 'friendsList');
+		}
+		const groupMembers = document.querySelectorAll('table#tableMembers tbody th a');
+		if (groupMembers.length > 0) {
+			const infobox = document.querySelector('div.group_infobox');
+			const type = infobox.querySelector('b').innerText.trim();
+			const bannedMembers = [...groupMembers].map(member => {
+				const UID = member.href.split('/').slice(-1)[0];
+				const nick = member.innerText.trim();
+				if (!nick || nick == '') return UID;
+			}).filter(elem => elem != undefined);
+			showBannedMembersInfo(await Promise.all(bannedMembers), document.querySelector('#tab_members div.card-body'), type);
+		}
+	}
 
 	async function mainActivity(){
 		console.time('ładowanie niezbędnych zasobów');
@@ -1238,6 +1294,7 @@
 			const ID = window.location.pathname.split('/').slice(-1)[0];
 			insertGroupTopPosition(ID);
 			addZonesToGangPage(ID);
+			searchForBannedPlayers();
 		} else if (url.startsWith(urls.profile)){
 			const ID = window.location.pathname.split('/').slice(-1)[0];
 			document.body.addEventListener('click', evt => {
@@ -1249,6 +1306,7 @@
 			prepareGroupSearch();
 			addSomethingToNick();
 			searchForPlayerHouse(ID);
+			searchForBannedPlayers();
 		} else if (url == urls.main + '/') {
 			addZonesToMainPage();
 			window.addEventListener('load', fixRectangleLogos);
@@ -1371,6 +1429,26 @@
 			margin-top: .8em;
 			font-size: .9em;
 		/*	font-weight: 600; */
+		}
+
+		.bannedMemberInfoBox {
+			display: block;
+			box-shadow: 0 4px 8px 0 rgba(0,0,0,0.1), 0 6px 20px 0 rgba(0,0,0,0.09);
+			padding: 2em 1em;
+			margin-bottom: 2em;
+			background-color: rgba(255, 0, 0, 0.3);
+			opacity: 0.9;
+			border-radius: 15px;
+			animation: blinkRed 3s infinite alternate;
+		}
+
+		.bannedMemberInfoBox h1 {
+			margin-top: 0;
+		}
+
+		@keyframes blinkRed{
+			from {background-color: rgba(255, 0, 0, 0.1);}
+			to {background-color: rgba(255, 0, 0, 0.5);}
 		}
 		`);
 		const font = await getPage('https://fonts.googleapis.com/css2?family=Fira+Sans&display=swap', true);
